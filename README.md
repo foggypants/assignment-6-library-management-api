@@ -1,239 +1,182 @@
-# 📚 Assignment 06: Library Management API with Firebase, Rate Limiting & Swagger
-> **Track:** Backend Development | **Level:** Intermediate to Advanced | **Estimated Time:** 7–9 Hours  
-> **Tech Stack:** Node.js, Express.js, Firebase Admin SDK (Firestore & Auth), JWT, bcryptjs, express-rate-limit, swagger-ui-express
+# 📚 Library Management System API
+
+A RESTful backend API for a Library Management System built using **Node.js**, **Express.js**, **JWT (JSON Web Tokens)**, and **Firebase Firestore**.
 
 ---
 
-## 📌 1. Objective & Overview
+## 🚀 Features
 
-Build a production-grade RESTful API for an institutional **Library Management System** integrating **Google Firebase Firestore** as the cloud document store, **JWT & bcrypt** for role-based authentication (`Student` vs `Librarian`), **API Rate Limiting** to guard against DoS/abuse attacks, and **Swagger (OpenAPI 3.0)** for automated interactive documentation.
-
-### Key Learning Outcomes:
-- Initializing and securing Firebase Admin SDK using service account credentials.
-- Performing Firestore collection and document queries (`addDoc`, `getDocs`, `updateDoc`, sub-collections).
-- Enforcing Role-Based Access Control (RBAC): Librarians can add/edit books; Students can browse and borrow/return books.
-- Implementing API Rate Limiting using `express-rate-limit`.
-- Documenting every endpoint with JSDoc annotations and serving a live UI via `swagger-ui-express`.
+- **Authentication & Security**:
+  - JWT-based authentication for students and librarians.
+  - Password hashing with `bcryptjs`.
+  - Route protection and custom role-based access control (`student` vs `librarian`).
+  - Rate limiting (100 requests per 15 minutes) using `express-rate-limit`.
+  - Security headers with `helmet` and CORS support.
+- **Book Management**:
+  - Complete CRUD operations for books.
+  - Filter by category, author, and status (`available` / `borrowed`).
+  - Search endpoint for quick book discovery.
+- **Borrow & Return System**:
+  - Students can borrow available books (loan duration tracked for 14 days).
+  - Stock/quantity updates automatically when borrowing/returning.
+  - Students can return books and overdue status is calculated automatically.
+- **Transactions & User Management**:
+  - View user transaction history and full library transaction logs.
+  - Librarian-only user management (list users, view profile, update roles, delete accounts).
+- **API Documentation**:
+  - Interactive Swagger UI available at `/api-docs`.
+  - Ready-to-import Postman Collection (`postman_collection.json`).
 
 ---
 
-## 🛠️ 2. Tech Stack & Dependencies
+## 🛠️ Tech Stack
 
-```bash
-# Initialize Node.js project
-npm init -y
+- **Runtime**: Node.js
+- **Framework**: Express.js
+- **Database**: Firebase Firestore (`firebase-admin`)
+- **Authentication**: `jsonwebtoken` (JWT) & `bcryptjs`
+- **Validation**: `express-validator`
+- **Documentation**: Swagger / OpenAPI 3.0 (`swagger-ui-express`, `yamljs`)
+- **Security & Utilities**: `helmet`, `cors`, `dotenv`, `express-rate-limit`
 
-# Install dependencies
-npm install express firebase-admin jsonwebtoken bcryptjs express-rate-limit swagger-ui-express swagger-jsdoc dotenv cors
+---
 
-# Install development tools
-npm install -D nodemon
+## 📁 Project Structure
+
 ```
-
----
-
-## 👥 3. User Roles & Permission Matrix
-
-| Operation | Student | Librarian | Public |
-|---|:---:|:---:|:---:|
-| `POST /api/auth/register` (as Student) | ✅ | ❌ | ✅ |
-| `POST /api/auth/register-librarian` (with Secret Key) | ❌ | ✅ | ✅ |
-| `GET /api/books` (Browse catalog) | ✅ | ✅ | ✅ |
-| `POST /api/books` (Add new book) | ❌ | ✅ | ❌ |
-| `PUT /api/books/:id` (Update book details) | ❌ | ✅ | ❌ |
-| `DELETE /api/books/:id` (Remove book) | ❌ | ✅ | ❌ |
-| `POST /api/books/:id/borrow` | ✅ | ❌ | ❌ |
-| `POST /api/books/:id/return` | ✅ | ❌ | ❌ |
-| `GET /api/reports/overdue` | ❌ | ✅ | ❌ |
-
----
-
-## 🗄️ 4. Firebase Firestore Schema Design
-
-### 1. `users` Collection
-```json
-{
-  "uid": "auto_generated_doc_id",
-  "name": "Jane Smith",
-  "email": "jane@university.edu",
-  "password": "$2a$10$hashed_password...",
-  "role": "student", // "student" or "librarian"
-  "createdAt": "2026-03-01T12:00:00Z"
-}
-```
-
-### 2. `books` Collection
-```json
-{
-  "id": "book_doc_id_101",
-  "title": "Introduction to Algorithms",
-  "author": "Thomas H. Cormen",
-  "isbn": "978-0262033848",
-  "category": "Computer Science",
-  "totalCopies": 10,
-  "availableCopies": 7,
-  "createdAt": "2026-03-01T12:00:00Z"
-}
-```
-
-### 3. `borrow_records` Collection
-```json
-{
-  "id": "borrow_doc_id_999",
-  "userId": "user_doc_id",
-  "bookId": "book_doc_id_101",
-  "bookTitle": "Introduction to Algorithms",
-  "borrowDate": "2026-03-01T14:00:00Z",
-  "dueDate": "2026-03-15T14:00:00Z",
-  "returnDate": null,
-  "status": "borrowed" // "borrowed" or "returned"
-}
-```
-
----
-
-## 📋 5. API Endpoints Specification
-
-### 🔐 Authentication & Users
-
-| Method | Endpoint | Access Level | Description |
-|---|---|:---:|---|
-| `POST` | `/api/auth/register` | Public | Register a new Student account |
-| `POST` | `/api/auth/login` | Public | Login with email & password, returns JWT token with embedded role |
-| `GET` | `/api/auth/profile` | Authenticated | Retrieve current user profile |
-
-### 📖 Book Catalog & Inventory
-
-| Method | Endpoint | Access Level | Description |
-|---|---|:---:|---|
-| `GET` | `/api/books` | Public | List books with search (`?search=algorithms`) & category filter |
-| `GET` | `/api/books/:id` | Public | Get single book details & current availability |
-| `POST` | `/api/books` | **Librarian Only** | Create a new book record |
-| `PUT` | `/api/books/:id` | **Librarian Only** | Update book details or inventory copies |
-| `DELETE` | `/api/books/:id` | **Librarian Only** | Remove book from catalog |
-
-### 🔄 Borrow & Return System
-
-| Method | Endpoint | Access Level | Description |
-|---|---|:---:|---|
-| `POST` | `/api/books/:id/borrow` | **Student Only** | Borrow a copy (Decrements `availableCopies`, creates borrow record) |
-| `POST` | `/api/books/:id/return` | **Student Only** | Return borrowed book (Increments `availableCopies`, sets `returnDate`) |
-| `GET` | `/api/books/my-history` | **Student Only** | View current user's borrowing history |
-| `GET` | `/api/librarian/borrow-records` | **Librarian Only** | View all active and past borrow records |
-
-### 📑 Swagger API Docs & Rate Limiting
-
-| Method | Endpoint | Access Level | Description |
-|---|---|:---:|---|
-| `GET` | `/api-docs` | Public | Interactive Swagger UI API documentation |
-| Global | All `/api/*` | Public | Rate limited to 100 requests per 15 minutes |
-
----
-
-## 🛡️ 6. Rate Limiting & Swagger Setup
-
-### Rate Limiter Configuration (`middleware/rateLimiter.js`):
-```javascript
-const rateLimit = require('express-rate-limit');
-
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Max 100 requests per windowMs per IP
-  message: {
-    success: false,
-    message: 'Too many requests created from this IP, please try again after 15 minutes'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-module.exports = apiLimiter;
-```
-
-### Swagger JSDoc Setup (`config/swagger.js`):
-```javascript
-const swaggerJsdoc = require('swagger-jsdoc');
-
-const options = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Library Management API',
-      version: '1.0.0',
-      description: 'Documented with Swagger OpenAPI 3.0'
-    },
-    servers: [{ url: 'http://localhost:5000' }],
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    }
-  },
-  apis: ['./routes/*.js']
-};
-
-module.exports = swaggerJsdoc(options);
-```
-
----
-
-## 🏗️ 7. Recommended Directory Structure
-
-```text
-assignment-06-library-api/
-├── config/
-│   ├── firebaseConfig.js   # Firebase Admin SDK initialization
-│   └── swagger.js          # Swagger JSDoc configuration
-├── controllers/
-│   ├── authController.js   # Registration, login & JWT generation
-│   ├── bookController.js   # Book CRUD & inventory logic
-│   └── borrowController.js # Borrow, return & history logic
-├── middleware/
-│   ├── auth.js             # JWT verification middleware
-│   ├── checkRole.js        # RBAC middleware (verifyStudent, verifyLibrarian)
-│   └── rateLimiter.js      # Express rate limiter configuration
-├── routes/
-│   ├── authRoutes.js       # Swagger-documented auth routes
-│   ├── bookRoutes.js       # Swagger-documented book routes
-│   └── borrowRoutes.js     # Swagger-documented borrow/return routes
-├── serviceAccountKey.json  # Firebase service account (In .gitignore)
-├── .env.example
+Ashish_Kumar/
+├── server.js                 # Main server entry file
+├── package.json             # Project dependencies & scripts
+├── .env                     # Environment variables (local)
+├── .env.example             # Example environment variables template
 ├── .gitignore
-├── package.json
-├── server.js
-└── README.md
+├── src/
+│   ├── config/
+│   │   ├── firebase.js      # Firebase Admin & Firestore initialization
+│   │   └── swagger.js       # Swagger UI configuration
+│   ├── middleware/
+│   │   ├── auth.js          # JWT token verification
+│   │   ├── role.js          # Role-based access authorization
+│   │   ├── logger.js        # Request logging middleware
+│   │   ├── rateLimiter.js   # Rate limiting middleware
+│   │   └── validator.js     # Request validation error handler
+│   ├── routes/
+│   │   ├── authRoutes.js    # /api/auth routes
+│   │   ├── bookRoutes.js    # /api/books routes
+│   │   ├── userRoutes.js    # /api/users routes
+│   │   └── transactionRoutes.js # /api/transactions routes
+│   ├── controllers/
+│   │   ├── authController.js
+│   │   ├── bookController.js
+│   │   ├── userController.js
+│   │   └── transactionController.js
+│   ├── models/
+│   │   ├── userModel.js     # User Firestore operations
+│   │   ├── bookModel.js     # Book Firestore operations
+│   │   └── transactionModel.js # Transaction Firestore operations
+│   └── utils/
+│       ├── jwt.js            # JWT helper functions
+│       └── validation.js     # express-validator schemas
+├── docs/
+│   └── swagger.yaml         # OpenAPI 3.0 specification
+├── postman_collection.json  # Postman test collection
+└── README.md                # Project documentation
 ```
 
 ---
 
-## 🧪 8. Verification & Testing
+## ⚙️ Installation & Setup
 
-1. Place your `serviceAccountKey.json` from Firebase Console inside the root and configure `firebaseConfig.js`.
-2. Start server and visit `http://localhost:5000/api-docs` to view Swagger UI.
-3. Test RBAC: Ensure a user with role `student` receives `403 Forbidden` when attempting to call `POST /api/books`.
-4. Test Borrow/Return logic: Confirm `availableCopies` decrements when borrowed and cannot drop below `0`.
+### 1. Clone or Extract the Project
+```bash
+cd "Ashish_Kumar"
+```
+
+### 2. Install Dependencies
+```bash
+npm install
+```
+
+### 3. Configure Environment Variables
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+Open `.env` and set your preferred port and secrets:
+```env
+PORT=5000
+NODE_ENV=development
+JWT_SECRET=your_secret_key_here
+JWT_EXPIRES_IN=24h
+
+# Optional Firebase credentials (or place serviceAccountKey.json in root folder):
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_CLIENT_EMAIL=your-service-account-email
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+> **Note**: If Firebase credentials are not provided, the API will automatically use the built-in local store so that all endpoints and tests function immediately out of the box.
+
+### 4. Run the Server
+- **Development Mode (with auto-restart)**:
+  ```bash
+  npm run dev
+  ```
+- **Production Mode**:
+  ```bash
+  npm start
+  ```
 
 ---
 
-## 📊 9. Grading Rubric (100 Marks)
+## 📖 API Documentation & Swagger UI
 
-| Evaluation Component | Marks |
-|---|:---:|
-| **Firebase Firestore Integration & Queries** (Data structure, transactions/atomic updates) | 25 |
-| **Role-Based Access Control (RBAC)** (Student vs Librarian permissions) | 20 |
-| **Borrow & Return Business Logic** (Availability validation, due date tracking) | 20 |
-| **Swagger Documentation Coverage** (Interactive UI with schema documentation) | 15 |
-| **Rate Limiting & Security Hardening** (express-rate-limit, bcrypt, error handlers) | 20 |
-| **Total Marks** | **100** |
+Once the server is running, visit the interactive Swagger UI at:
+👉 **[http://localhost:5000/api-docs](http://localhost:5000/api-docs)**
 
 ---
 
-## 📤 10. Submission Guidelines
+## 📋 API Endpoints
 
-- Submit your GitHub repository: `itm-assignment-06-library-api`.
-- Include a screenshot of your live **Swagger UI** (`/api-docs`) in the repository.
-- Ensure `.gitignore` ignores `serviceAccountKey.json` and `.env`.
+### 🔹 Authentication (`/api/auth`)
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | Public | Register new student or librarian |
+| `POST` | `/api/auth/login` | Public | Login and receive JWT token |
+| `GET` | `/api/auth/profile` | Authenticated | Get current user profile |
+| `PUT` | `/api/auth/profile` | Authenticated | Update current user profile |
+
+### 🔹 Book Management (`/api/books`)
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/books` | Public | Get all books (supports `?category=`, `?status=`, `?author=`) |
+| `GET` | `/api/books/search` | Public | Search books (`?q=`, `?title=`, `?author=`) |
+| `GET` | `/api/books/:id` | Public | Get book details by ID |
+| `POST` | `/api/books` | Librarian | Add a new book |
+| `PUT` | `/api/books/:id` | Librarian | Update book details |
+| `DELETE` | `/api/books/:id` | Librarian | Delete a book |
+| `POST` | `/api/books/:id/borrow` | Student | Borrow a book (sets 14-day due date) |
+| `POST` | `/api/books/:id/return` | Student | Return a borrowed book |
+
+### 🔹 Transactions (`/api/transactions`)
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/transactions` | Librarian | Get all borrow/return transaction records |
+| `GET` | `/api/transactions/my` | Authenticated | Get current logged-in user's transaction history |
+
+### 🔹 User Management (`/api/users`)
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/users` | Librarian | Get all registered users |
+| `GET` | `/api/users/:id` | Librarian | Get single user details by ID |
+| `PUT` | `/api/users/:id/role` | Librarian | Change user role (`student` or `librarian`) |
+| `DELETE` | `/api/users/:id` | Librarian | Delete a user account |
+
+---
+
+## 🧪 Testing with Postman
+
+1. Open **Postman**.
+2. Click **Import** and select `postman_collection.json`.
+3. Set the `baseUrl` variable to `http://localhost:5000`.
+4. Register a Librarian (`librarian@example.com`) and a Student (`student@example.com`).
+5. Copy the JWT token into the headers: `Authorization: Bearer <your-token>`.
