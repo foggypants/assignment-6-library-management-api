@@ -131,7 +131,7 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY----
 ## 📖 API Documentation & Swagger UI
 
 Once the server is running, visit the interactive Swagger UI at:
-👉 **[http://localhost:5000/api-docs](http://localhost:5000/api-docs)**
+👉 **https://assignment-6-library-management-api-8ekg.onrender.com**
 
 ---
 
